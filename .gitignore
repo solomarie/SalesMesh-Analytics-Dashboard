@@ -1,0 +1,18 @@
+# Trained model files - regenerate by running the notebook
+*.pkl
+
+# Compressed Kaggle downloads (already extracted)
+*.zip
+
+# Large campaign data files - download from Kaggle, see README
+marketing_campaign_dataset.csv
+campaigns_cleaned.csv
+
+# Jupyter / Python
+.ipynb_checkpoints/
+__pycache__/
+
+# Operating system files
+Thumbs.db
+desktop.ini
+.DS_Store
