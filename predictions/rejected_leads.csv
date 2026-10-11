@@ -1,0 +1,9 @@
+Prospect ID,Lead Origin,Lead Source,Do Not Email,Do Not Call,TotalVisits,Total Time Spent on Website,Page Views Per Visit,Last Activity,Country,Specialization,How did you hear about X Education,What is your current occupation,City,Last Notable Activity,Reason
+NEW-0007,Landing Page Submission,Organic Search,Yes,No,,1525,6,SMS Sent,India,Travel and Tourism,Online Search,Working Professional,Other Cities of Maharashtra,SMS Sent,TotalVisits is missing
+NEW-0008,Landing Page Submission,Organic Search,Yes,No,6,-45,6,SMS Sent,India,Travel and Tourism,Online Search,Working Professional,Other Cities of Maharashtra,SMS Sent,Total Time Spent on Website cannot be negative (got -45)
+NEW-0009,Landing Page Submission,Organic Search,Yes,No,five,1525,6,SMS Sent,India,Travel and Tourism,Online Search,Working Professional,Other Cities of Maharashtra,SMS Sent,TotalVisits must be a number (got 'five')
+NEW-0010,Landing Page Submission,TikTok,Yes,No,6,1525,6,SMS Sent,India,Travel and Tourism,Online Search,Working Professional,Other Cities of Maharashtra,SMS Sent,Lead Source has an unknown value 'TikTok'
+NEW-0011,Landing Page Submission,Organic Search,Yes,No,6,1525,6,SMS Sent,India,Select,Online Search,Working Professional,Other Cities of Maharashtra,SMS Sent,Specialization is missing
+NEW-0001,Landing Page Submission,Organic Search,Yes,No,6,1525,6,SMS Sent,India,Travel and Tourism,Online Search,Working Professional,Other Cities of Maharashtra,SMS Sent,Prospect ID NEW-0001 appears more than once in the file
+7927b2df-8bba-4d29-b9a2-b6e0beafe620,Landing Page Submission,Organic Search,Yes,No,6,1525,6,SMS Sent,India,Travel and Tourism,Online Search,Working Professional,Other Cities of Maharashtra,SMS Sent,Prospect ID 7927b2df-8bba-4d29-b9a2-b6e0beafe620 already exists in the database
+,Landing Page Submission,Organic Search,Yes,No,6,1525,6,SMS Sent,India,Travel and Tourism,Online Search,Working Professional,Other Cities of Maharashtra,SMS Sent,Prospect ID is blank

@@ -1,0 +1,17 @@
+Test ID,Test case,Expected result,Actual result,Status,Corrective action
+T01,Batch with 6 valid and 8 invalid leads,"6 accepted, 8 rejected","6 accepted, 8 rejected",Pass,None required
+T02,Encoded input matches the model,"132 features, same order as training","132 features, order matches",Pass,None required
+T03,Probabilities are valid,Every probability between 0 and 1,"min 0.0446, max 0.9784",Pass,None required
+T04,Tier thresholds at the boundaries (FR-04),"0.70 High, 0.6999 Medium, 0.40 Medium, 0.3999 Low","0.7 High, 0.6999 Medium, 0.4 Medium, 0.3999 Low",Pass,None required
+T05,Every scored lead gets the right tier,Tier matches its probability for all 6 leads,6 of 6 match,Pass,None required
+T06,Scoring the same leads twice,Identical probabilities both times,Identical,Pass,None required
+T07,Missing TotalVisits,Rejected: 'TotalVisits is missing',Rejected: TotalVisits is missing,Pass,None required
+T08,Negative time on website (-45),Rejected: 'cannot be negative',Rejected: Total Time Spent on Website cannot be negative (got -45),Pass,None required
+T09,Text instead of a number ('five'),Rejected: 'must be a number',Rejected: TotalVisits must be a number (got 'five'),Pass,None required
+T10,Unknown lead source ('TikTok'),Rejected: 'unknown value',Rejected: Lead Source has an unknown value 'TikTok',Pass,None required
+T11,Placeholder 'Select' in Specialization,Rejected: 'Specialization is missing',Rejected: Specialization is missing,Pass,None required
+T12,Prospect ID repeated in the same file,Rejected: 'appears more than once',Rejected: Prospect ID NEW-0001 appears more than once in the file,Pass,None required
+T13,Prospect ID already in the database,Rejected: 'already exists',Rejected: Prospect ID 7927b2df-8bba-4d29-b9a2-b6e0beafe620 already exists in the database,Pass,None required
+T14,Blank Prospect ID,Rejected: 'Prospect ID is blank',Rejected: Prospect ID is blank,Pass,None required
+T15,File missing a required column,Whole file rejected with a clear message,The file is missing required column(s): TotalVisits,Pass,None required
+T16,Empty file (headers only),Whole file rejected with a clear message,The file contains no lead rows.,Pass,None required
