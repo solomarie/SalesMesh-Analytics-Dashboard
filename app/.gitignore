@@ -1,0 +1,5 @@
+# Never upload passwords, Google keys or the local model copy
+.env
+.streamlit/secrets.toml
+__pycache__/
+model/*.pkl

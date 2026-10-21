@@ -1,0 +1,277 @@
+"""
+FR-01 / IR-04 / NFR-01: registration and login.
+
+* Passwords are hashed with bcrypt (salted, deliberately slow), never stored as text.
+* After 5 wrong passwords an account is locked for 15 minutes.
+* New registrations are Marketer accounts that stay inactive until a
+  Marketing Manager or Admin approves them.
+"""
+import hashlib
+import re
+import secrets
+from datetime import datetime, timedelta
+
+import bcrypt
+
+from . import config, db, mailer
+
+ROLES = ("admin", "manager", "marketer")
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+GENERIC_LOGIN_ERROR = "Incorrect email or password."
+
+
+class AuthError(Exception):
+    """Shown to the user as-is."""
+
+
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode("utf-8")
+
+
+def verify_password(password: str, stored_hash: str) -> bool:
+    if not stored_hash or not stored_hash.startswith("$2"):
+        return False
+    return bcrypt.checkpw(password.encode("utf-8"), stored_hash.encode("utf-8"))
+
+
+def password_problems(password: str) -> list:
+    problems = []
+    if len(password) < 8:
+        problems.append("at least 8 characters")
+    if not re.search(r"[A-Za-z]", password):
+        problems.append("a letter")
+    if not re.search(r"\d", password):
+        problems.append("a number")
+    return problems
+
+
+def authenticate(email: str, password: str, now: datetime = None) -> dict:
+    """Return the signed-in user, or raise AuthError with a message safe to show."""
+    now = now or datetime.now()
+    email = (email or "").strip().lower()
+    user = db.query_one(
+        "SELECT u.user_id, u.email, u.password_hash, u.role, u.is_active, u.failed_logins, u.locked_until, "
+        "COALESCE(b.full_name, u.email) AS full_name "
+        "FROM users u LEFT JOIN user_biodata b ON b.user_id = u.user_id WHERE u.email = %s", (email,))
+    if user is None:
+        raise AuthError(GENERIC_LOGIN_ERROR)
+    if user["locked_until"] and user["locked_until"] > now:
+        minutes = int((user["locked_until"] - now).total_seconds() // 60) + 1
+        raise AuthError(f"Too many failed attempts. Try again in {minutes} minute(s).")
+    if not verify_password(password or "", user["password_hash"]):
+        failed = user["failed_logins"] + 1
+        locked = now + timedelta(minutes=config.LOCKOUT_MINUTES) if failed >= config.MAX_FAILED_LOGINS else None
+        db.execute("UPDATE users SET failed_logins = %s, locked_until = %s WHERE user_id = %s",
+                   (0 if locked else failed, locked, user["user_id"]))
+        if locked:
+            raise AuthError(f"Too many failed attempts. The account is locked for {config.LOCKOUT_MINUTES} minutes.")
+        raise AuthError(GENERIC_LOGIN_ERROR)
+    if not user["is_active"]:
+        raise AuthError("This account is waiting for a manager's approval.")
+    db.execute("UPDATE users SET failed_logins = 0, locked_until = NULL WHERE user_id = %s", (user["user_id"],))
+    return {k: user[k] for k in ("user_id", "email", "role", "full_name")}
+
+
+def register(full_name: str, email: str, password: str, confirm: str, phone: str = "") -> int:
+    """Create an inactive Marketer account. Raises AuthError if anything is wrong."""
+    full_name = (full_name or "").strip()
+    email = (email or "").strip().lower()
+    if not full_name:
+        raise AuthError("Please enter your full name.")
+    if not EMAIL_RE.match(email):
+        raise AuthError("Please enter a valid email address.")
+    problems = password_problems(password or "")
+    if problems:
+        raise AuthError("Password needs " + ", ".join(problems) + ".")
+    if password != confirm:
+        raise AuthError("The two passwords do not match.")
+    if db.query_one("SELECT user_id FROM users WHERE email = %s", (email,)):
+        raise AuthError("An account with this email already exists.")
+    conn = db.connect()
+    try:
+        user_id = db.execute(
+            "INSERT INTO users (email, password_hash, role, is_active) VALUES (%s, %s, 'marketer', 0)",
+            (email, hash_password(password)), conn)
+        db.execute(
+            "INSERT INTO user_biodata (user_id, full_name, phone, department, job_title) "
+            "VALUES (%s, %s, %s, 'Marketing', 'Marketer')", (user_id, full_name, phone or None), conn)
+        conn.commit()
+        return user_id
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+# Accounts created through Google have no SalesMesh password. This marker can never
+# match a bcrypt hash, so password sign-in is impossible for them until an admin sets one.
+EXTERNAL_ONLY = "!external-sign-in"
+
+
+def external_sign_in(email: str, full_name: str, email_verified: bool, provider: str = "Google") -> dict:
+    """
+    Sign in with an identity already confirmed by Google (OpenID Connect).
+    Known, active account -> signed in with its SalesMesh role.
+    Unknown email -> an inactive Marketer account is created and waits for a manager's approval,
+    exactly like a normal registration. Google proves who the person is; SalesMesh still decides
+    what they may do.
+    """
+    email = (email or "").strip().lower()
+    if not email or not email_verified:
+        raise AuthError(f"Your {provider} email address is not verified, so it cannot be used here.")
+    user = db.query_one(
+        "SELECT u.user_id, u.email, u.role, u.is_active, COALESCE(b.full_name, u.email) AS full_name "
+        "FROM users u LEFT JOIN user_biodata b ON b.user_id = u.user_id WHERE u.email = %s", (email,))
+    if user is None:
+        conn = db.connect()
+        try:
+            user_id = db.execute("INSERT INTO users (email, password_hash, role, is_active) "
+                                 "VALUES (%s, %s, 'marketer', 0)", (email, EXTERNAL_ONLY), conn)
+            db.execute("INSERT INTO user_biodata (user_id, full_name, department, job_title) "
+                       "VALUES (%s, %s, 'Marketing', 'Marketer')", (user_id, (full_name or email)[:100]), conn)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+        raise AuthError(f"Your account was created with {provider}. A Marketing Manager must approve it "
+                        "before you can use SalesMesh.")
+    if not user["is_active"]:
+        raise AuthError("This account is waiting for a manager's approval.")
+    db.execute("UPDATE users SET failed_logins = 0, locked_until = NULL WHERE user_id = %s", (user["user_id"],))
+    return {k: user[k] for k in ("user_id", "email", "role", "full_name")}
+
+
+def change_password(user: dict, current: str, new: str, confirm: str):
+    """Any signed-in user can change their own password."""
+    row = db.query_one("SELECT password_hash FROM users WHERE user_id = %s", (user["user_id"],))
+    if row is None or not verify_password(current or "", row["password_hash"]):
+        raise AuthError("Your current password is incorrect.")
+    problems = password_problems(new or "")
+    if problems:
+        raise AuthError("New password needs " + ", ".join(problems) + ".")
+    if new != confirm:
+        raise AuthError("The two new passwords do not match.")
+    if new == current:
+        raise AuthError("Choose a password different from the current one.")
+    db.execute("UPDATE users SET password_hash = %s WHERE user_id = %s", (hash_password(new), user["user_id"]))
+    mailer.send(user["email"], "Your SalesMesh password was changed",
+                "The password for your SalesMesh account was just changed from the My account page.\n\n"
+                "If this was you, there is nothing else to do.\n"
+                "If it wasn't you, use 'Forgot password?' on the sign-in page straight away and tell "
+                "your SalesMesh administrator.\n\nSalesMesh")
+
+
+def admin_reset_password(user: dict, target_id: int, new: str):
+    """An admin sets a temporary password for someone who forgot theirs, and unlocks the account."""
+    require_role(user, "admin")
+    problems = password_problems(new or "")
+    if problems:
+        raise AuthError("Temporary password needs " + ", ".join(problems) + ".")
+    db.execute("UPDATE users SET password_hash = %s, failed_logins = 0, locked_until = NULL WHERE user_id = %s",
+               (hash_password(new), target_id))
+
+
+# ------------------------------------------------------------------ forgot password
+RESET_SENT_MESSAGE = ("If an account exists for that email, we've sent a link to reset your password. "
+                      "It expires in {minutes} minutes. Check your spam folder if it doesn't arrive.")
+
+
+def _token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def request_password_reset(email: str, now: datetime = None) -> str:
+    """
+    Email a one-time reset link. Always returns the same message, whether or not the
+    email belongs to an account, so the form cannot be used to find out who is registered.
+    """
+    now = now or datetime.now()
+    email = (email or "").strip().lower()
+    message = RESET_SENT_MESSAGE.format(minutes=config.RESET_LINK_MINUTES)
+    if not EMAIL_RE.match(email):
+        raise AuthError("Please enter a valid email address.")
+    user = db.query_one("SELECT u.user_id, COALESCE(b.full_name, u.email) AS full_name FROM users u "
+                        "LEFT JOIN user_biodata b ON b.user_id = u.user_id WHERE u.email = %s", (email,))
+    if user is None:
+        return message
+    recent = db.query_one("SELECT COUNT(*) AS n FROM password_resets WHERE user_id = %s AND created_at > %s",
+                          (user["user_id"], now - timedelta(hours=1)))["n"]
+    if recent >= config.MAX_RESET_REQUESTS_PER_HOUR:
+        return message  # quietly limit repeated requests
+    token = secrets.token_urlsafe(32)
+    db.execute("INSERT INTO password_resets (user_id, token_hash, created_at, expires_at) VALUES (%s, %s, %s, %s)",
+               (user["user_id"], _token_hash(token), now, now + timedelta(minutes=config.RESET_LINK_MINUTES)))
+    link = f"{config.APP_BASE_URL}/?reset={token}"
+    mailer.send(email, "Reset your SalesMesh password",
+                f"Hi {user['full_name']},\n\n"
+                "We received a request to reset the password for your SalesMesh account.\n"
+                "Open this link to choose a new password:\n\n"
+                f"{link}\n\n"
+                f"The link expires in {config.RESET_LINK_MINUTES} minutes and can only be used once.\n\n"
+                "If you didn't ask for this, you can ignore this email. Your password will not change.\n\n"
+                "SalesMesh")
+    return message
+
+
+def check_reset_token(token: str, now: datetime = None) -> dict:
+    """Return the account a reset link belongs to, or raise AuthError if the link cannot be used."""
+    now = now or datetime.now()
+    row = db.query_one(
+        "SELECT r.reset_id, r.user_id, r.expires_at, r.used_at, u.email FROM password_resets r "
+        "JOIN users u ON u.user_id = r.user_id WHERE r.token_hash = %s", (_token_hash(token or ""),))
+    if row is None or row["used_at"] is not None:
+        raise AuthError("This reset link is not valid or has already been used. Request a new one.")
+    if row["expires_at"] < now:
+        raise AuthError("This reset link has expired. Request a new one.")
+    return row
+
+
+def reset_password_with_token(token: str, new: str, confirm: str, now: datetime = None) -> str:
+    """Set a new password from a valid link. Every other open link for the account stops working."""
+    now = now or datetime.now()
+    row = check_reset_token(token, now)
+    problems = password_problems(new or "")
+    if problems:
+        raise AuthError("Password needs " + ", ".join(problems) + ".")
+    if new != confirm:
+        raise AuthError("The two passwords do not match.")
+    conn = db.connect()
+    try:
+        db.execute("UPDATE users SET password_hash = %s, failed_logins = 0, locked_until = NULL WHERE user_id = %s",
+                   (hash_password(new), row["user_id"]), conn)
+        db.execute("UPDATE password_resets SET used_at = %s WHERE user_id = %s AND used_at IS NULL",
+                   (now, row["user_id"]), conn)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+    mailer.send(row["email"], "Your SalesMesh password was changed",
+                "The password for your SalesMesh account was just changed.\n\n"
+                "If this was you, there is nothing else to do.\n"
+                "If it wasn't you, contact your SalesMesh administrator straight away.\n\nSalesMesh")
+    return row["email"]
+
+
+def refresh_session_user(user: dict):
+    """
+    Re-read the signed-in person's account on every page load, so a role change or a
+    deactivation takes effect immediately instead of at their next sign-in.
+    Returns the up-to-date user, or None if the account no longer exists or is inactive.
+    """
+    row = db.query_one(
+        "SELECT u.user_id, u.email, u.role, u.is_active, COALESCE(b.full_name, u.email) AS full_name "
+        "FROM users u LEFT JOIN user_biodata b ON b.user_id = u.user_id WHERE u.user_id = %s", (user["user_id"],))
+    if row is None or not row["is_active"]:
+        return None
+    return {k: row[k] for k in ("user_id", "email", "role", "full_name")}
+
+
+def require_role(user: dict, *roles: str):
+    """Server-side permission check used by every service function."""
+    if not user or user.get("role") not in roles:
+        raise PermissionError("You do not have permission to do this.")

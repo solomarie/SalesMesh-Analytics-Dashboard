@@ -1,0 +1,33 @@
+[theme]
+base = "light"
+primaryColor = "#185FA5"
+backgroundColor = "#F6F8FB"
+secondaryBackgroundColor = "#EBF0F6"
+textColor = "#16202C"
+borderColor = "#D8E0EA"
+linkColor = "#185FA5"
+dataframeHeaderBackgroundColor = "#EEF2F7"
+font = "Manrope:https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap"
+headingFont = "Manrope:https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap"
+headingFontSizes = ["2rem", "1.3rem", "1.05rem"]
+headingFontWeights = [800, 700, 700]
+metricValueFontSize = "1.85rem"
+metricValueFontWeight = 700
+baseRadius = "0.55rem"
+buttonRadius = "0.5rem"
+
+[theme.sidebar]
+backgroundColor = "#12263A"
+secondaryBackgroundColor = "#1C3550"
+textColor = "#E6EDF5"
+borderColor = "#2A4763"
+
+[client]
+toolbarMode = "minimal"
+
+[browser]
+gatherUsageStats = false
+
+[server]
+# Uploaded lead files are small CSVs
+maxUploadSize = 5
