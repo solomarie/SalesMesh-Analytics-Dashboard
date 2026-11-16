@@ -27,3 +27,12 @@ MAIL_FROM = os.getenv("MAIL_FROM", SMTP_USER)
 APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:8501").rstrip("/")
 RESET_LINK_MINUTES = 30
 MAX_RESET_REQUESTS_PER_HOUR = 3
+
+# Joining SalesMesh (Sprint III): there is no open self-registration.
+# People join through an invitation link, or by signing in with Google using an email
+# from one of these company domains (comma-separated, e.g. "salesmesh.com,company.co.ke").
+ALLOWED_SIGNUP_DOMAINS = [d.strip().lower().lstrip("@") for d in os.getenv("ALLOWED_SIGNUP_DOMAINS", "").split(",")
+                          if d.strip()]
+INVITE_DAYS = 7
+MAX_INVITES_PER_BATCH = 500
+

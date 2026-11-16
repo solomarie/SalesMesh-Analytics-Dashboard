@@ -2,8 +2,10 @@
 Scoring: validate new leads, score them with the trained model, assign the
 FR-04 priority tier and explain each score in plain words (FR-12).
 
-The validation rules are the same as in SalesMesh_Score_New_Leads.ipynb, so a
-lead gets the same answer in the app as in the notebook.
+The validation rules are the same as in SalesMesh_Score_New_Leads.ipynb, except that
+the six optional details below may be left out. A detail that is not provided is stored
+as unknown and scored with its most common value from the training data, so the lead
+gets the same score as in the notebook with that typical value.
 """
 import json
 from functools import lru_cache
@@ -21,6 +23,12 @@ FEATURE_INPUT_COLS = ["Lead Origin", "Lead Source", "Do Not Email", "Do Not Call
                       "Last Activity", "Country", "Specialization",
                       "How did you hear about X Education", "What is your current occupation",
                       "City", "Last Notable Activity"]
+
+# Details that barely change a score (test-set F1 0.764 with them, 0.763 without). They may be left
+# out of the form or the CSV file; they are then stored as unknown and scored with the typical value.
+OPTIONAL_COLS = ["Do Not Email", "Do Not Call", "Country", "Specialization",
+                 "How did you hear about X Education", "City"]
+NOT_PROVIDED = "Not provided"
 
 # Plain-language names used in explanations and forms
 FRIENDLY_NAMES = {
@@ -74,7 +82,7 @@ def model_features(model) -> list:
 def validate(batch: pd.DataFrame, existing_ids: set, reference: dict):
     """Split a raw batch into valid rows and rejected rows with a 'Reason' column."""
     required = ["Prospect ID"] + FEATURE_INPUT_COLS
-    missing = [c for c in required if c not in batch.columns]
+    missing = [c for c in required if c not in batch.columns and c not in OPTIONAL_COLS]
     if missing:
         raise InputFileError("The file is missing required column(s): " + ", ".join(missing))
     if len(batch) == 0:
@@ -82,7 +90,11 @@ def validate(batch: pd.DataFrame, existing_ids: set, reference: dict):
 
     batch = batch.copy().reset_index(drop=True)
     for col in required:
+        if col not in batch.columns:
+            batch[col] = ""
         batch[col] = batch[col].fillna("").astype(str).str.strip()
+    for col in OPTIONAL_COLS:
+        batch.loc[batch[col].isin(["", "Select", "None", "nan", NOT_PROVIDED]), col] = NOT_PROVIDED
 
     reasons = [[] for _ in range(len(batch))]
     ids = batch["Prospect ID"]
@@ -110,6 +122,8 @@ def validate(batch: pd.DataFrame, existing_ids: set, reference: dict):
     allowed = reference["allowed_values"]
     for col in CATEGORICAL_COLS:
         for i, raw in enumerate(batch[col]):
+            if col in OPTIONAL_COLS and raw == NOT_PROVIDED:
+                continue
             if raw == "" or raw == "Select":
                 reasons[i].append(f"{col} is missing")
             elif raw not in allowed[col]:
@@ -124,9 +138,18 @@ def validate(batch: pd.DataFrame, existing_ids: set, reference: dict):
     return valid, rejected
 
 
+def with_typical_values(rows: pd.DataFrame) -> pd.DataFrame:
+    """Score an optional detail that was not provided with its most common value."""
+    rows = rows[FEATURE_INPUT_COLS].copy()
+    baseline = load_reference()["baseline"]
+    for col in OPTIONAL_COLS:
+        rows.loc[rows[col].isna() | rows[col].isin(["", NOT_PROVIDED]), col] = baseline[col]
+    return rows
+
+
 def encode(rows: pd.DataFrame, features: list) -> pd.DataFrame:
     """One-hot encode and line the columns up exactly with the model's features."""
-    encoded = pd.get_dummies(rows[FEATURE_INPUT_COLS]).astype(float)
+    encoded = pd.get_dummies(with_typical_values(rows)).astype(float)
     return encoded.reindex(columns=features, fill_value=0.0)
 
 
@@ -155,6 +178,8 @@ def explain(row: pd.Series, model=None, reference=None, top_n: int = 3, min_effe
     variants, cols = [base], []
     for col in FEATURE_INPUT_COLS:
         typical = baseline[col]
+        if col in OPTIONAL_COLS and str(row[col]) in ("", NOT_PROVIDED):
+            continue  # not provided: already scored with the typical value
         same = (float(row[col]) == float(typical)) if col in NUMERIC_COLS else (str(row[col]) == str(typical))
         if same:
             continue

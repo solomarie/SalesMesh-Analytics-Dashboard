@@ -1,0 +1,35 @@
+Test ID,Requirement,Description,Result
+UT-01,FR-04,tier thresholds at the exact boundaries 0.70 and 0.40,Pass
+UT-02,"FR-03, FR-07",the app gives the same probabilities as the Colab scoring notebook (6 leads),Pass
+UT-03,IR-05,"every probability is between 0 and 1 and every tier is High, Medium or Low",Pass
+UT-04,FR-12,a high-scoring lead gets plain-language reasons naming what raised its score,Pass
+UT-05,FR-07,invalid lead rows are rejected with a clear reason (blank ID),Pass
+UT-05,FR-07,invalid lead rows are rejected with a clear reason (ID over 100 chars),Pass
+UT-05,FR-07,invalid lead rows are rejected with a clear reason (missing visits),Pass
+UT-05,FR-07,invalid lead rows are rejected with a clear reason (text for number),Pass
+UT-05,FR-07,invalid lead rows are rejected with a clear reason (negative time),Pass
+UT-05,FR-07,invalid lead rows are rejected with a clear reason (unknown source),Pass
+UT-05,FR-07,invalid lead rows are rejected with a clear reason (unknown city),Pass
+UT-05,FR-07,invalid lead rows are rejected with a clear reason (Select placeholder),Pass
+UT-06,FR-07,duplicate Prospect IDs in the file or in the database are rejected,Pass
+UT-07,FR-07,a file with a missing column or no rows is rejected as a whole,Pass
+UT-08,FR-09,follow-up outcomes move a lead to the right stage and never backwards,Pass
+UT-09,FR-09,a Converted or Lost lead cannot receive another follow-up,Pass
+UT-10,FR-09,next date required and not in the past; none needed to close; Lost needs a reason,Pass
+UT-11,FR-10,"untouched leads are due 1 (High), 3 (Medium) or 7 (Low) days after assignment",Pass
+UT-12,FR-10,a lead is overdue only when its due date is before today,Pass
+UT-13,NFR-01,passwords are stored as salted bcrypt hashes and old SHA-256 hashes are refused,Pass
+UT-14,FR-01,"passwords need 8+ characters, a letter and a number",Pass
+IT-01,IR-04,an unknown email gets the same generic error as a wrong password,Pass
+IT-02,NFR-01,every stored password is a bcrypt hash or a Google-only marker,Pass
+IT-03,NFR-01,a marketer's lead list contains only leads assigned to them,Pass
+IT-04,NFR-01,a marketer cannot open or log a follow-up on another marketer's lead,Pass
+IT-05,NFR-01,"a marketer cannot see team performance, reassign leads or approve accounts",Pass
+IT-06,NFR-01,a manager cannot deactivate an admin; nobody can change their own account,Pass
+IT-07,FR-09,a follow-up with a next date in the past is refused and nothing is saved,Pass
+IT-08,FR-07,the database itself rejects a duplicate Prospect ID (UNIQUE constraint),Pass
+IT-09,NFR-01,the app's MySQL account has no DELETE permission (least privilege),Pass
+IT-10,FR-10,the database's overdue flag agrees with the app's rule for every pipeline lead,Pass
+IT-11,IR-05,stored probabilities are between 0 and 1 and tiers match the thresholds,Pass
+IT-12,FR-08,every open pipeline lead is assigned to a marketer; historical leads have no owner,Pass
+IT-13,FR-01,unknown emails get the same reset message; a fake reset link is refused,Pass

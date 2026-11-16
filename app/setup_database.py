@@ -184,6 +184,7 @@ def main():
             used_at     DATETIME NULL,
             CONSTRAINT fk_password_resets_user FOREIGN KEY (user_id) REFERENCES users(user_id)
         )""")
+    create_collaboration_tables(cur)
     for table, name, cols in [
         ("leads", "idx_leads_owner_stage", "assigned_to, stage"),
         ("leads", "idx_leads_record_type", "record_type"),
@@ -219,10 +220,12 @@ def main():
 
     step("4. Remove the six NEW- demo leads")
     cur.execute("SET SQL_SAFE_UPDATES = 0")
-    cur.execute("DELETE f FROM follow_ups f JOIN leads l ON l.lead_id = f.lead_id WHERE l.prospect_id LIKE 'NEW-%'")
-    cur.execute("DELETE cp FROM conversion_predictions cp JOIN leads l ON cp.lead_id = l.lead_id "
-                "WHERE l.prospect_id LIKE 'NEW-%'")
-    cur.execute("DELETE FROM leads WHERE prospect_id LIKE 'NEW-%'")
+    # Only the six Sprint 2 demo leads: they were never assigned. Leads added in the app always have an
+    # owner, so a lead someone added with a NEW- ID is never deleted when this script is run again.
+    demo = "l.prospect_id LIKE 'NEW-%' AND l.assigned_to IS NULL AND l.prospect_id REGEXP '^NEW-000[1-6]$'"
+    cur.execute(f"DELETE f FROM follow_ups f JOIN leads l ON l.lead_id = f.lead_id WHERE {demo}")
+    cur.execute(f"DELETE cp FROM conversion_predictions cp JOIN leads l ON cp.lead_id = l.lead_id WHERE {demo}")
+    cur.execute(f"DELETE l FROM leads l WHERE {demo}")
     print(f"   removed {cur.rowcount} demo lead(s)")
     conn.commit()
 
@@ -245,10 +248,21 @@ def main():
     conn.commit()
 
     step("7. Demo accounts (bcrypt)")
+    cur.execute("SELECT COUNT(*) FROM leads WHERE record_type = 'pipeline'")
+    updating = cur.fetchone()[0] > 0  # the app is already set up: leave people's accounts as they are
     ids = {}
     for email, role, name, phone, title, _ in DEMO_USERS:
         cur.execute("SELECT user_id, password_hash FROM users WHERE email = %s", (email,))
         found = cur.fetchone()
+        if updating:
+            # Never re-create a demo account someone removed or renamed, and never undo a role change,
+            # a deactivation or a password change.
+            if found and not str(found[1]).startswith("$2"):
+                cur.execute("UPDATE users SET password_hash = %s WHERE user_id = %s",
+                            (hash_password(demo_password), found[0]))
+            if found:
+                ids[email] = found[0]
+            continue
         if found:
             uid = found[0]
             # Only replace old Sprint 2 SHA-256 hashes. A bcrypt password someone already set is kept,
@@ -270,6 +284,8 @@ def main():
                         "VALUES (%s, %s, %s, 'Marketing', %s)", (uid, name, phone, title))
         ids[email] = uid
         print(f"   {role:<8} {email}")
+    if updating:
+        print("   accounts kept as they are (update run)")
     conn.commit()
 
     step("8. Working pipeline from the held-out test set")
@@ -283,16 +299,11 @@ def main():
     create_views(cur)
     cur.execute("CREATE USER IF NOT EXISTS 'salesmesh_app'@'localhost' IDENTIFIED BY %s", (config.DB_PASSWORD,))
     cur.execute("ALTER USER 'salesmesh_app'@'localhost' IDENTIFIED BY %s", (config.DB_PASSWORD,))
-    for t in ("leads", "conversion_predictions", "follow_ups", "users", "user_biodata", "password_resets"):
+    for t in ("leads", "conversion_predictions", "follow_ups", "users", "user_biodata", "password_resets",
+              "invitations", "lead_events", "handover_requests", "notifications"):
         cur.execute(f"GRANT SELECT, INSERT, UPDATE ON salesmesh.{t} TO 'salesmesh_app'@'localhost'")
-    for v in ("campaigns", "team_members", "lead_pipeline_status", "team_performance"):
+    for v in ("team_members", "lead_pipeline_status", "team_performance"):
         cur.execute(f"GRANT SELECT ON salesmesh.{v} TO 'salesmesh_app'@'localhost'")
-    cur.execute("SELECT COUNT(*) FROM mysql.user WHERE user = 'powerbi_reader'")
-    if cur.fetchone()[0]:
-        for v in ("follow_ups", "team_members", "lead_pipeline_status", "team_performance"):
-            cur.execute(f"GRANT SELECT ON salesmesh.{v} TO 'powerbi_reader'@'localhost'")
-    else:
-        print("   powerbi_reader not found: skipped its grants")
     cur.execute("SET SQL_SAFE_UPDATES = 1")
     conn.commit()
 
@@ -374,6 +385,78 @@ def build_pipeline(conn, cur, ref, ids):
         stats[stage if stage in ("Converted", "Lost") else "open"] += 1
     conn.commit()
     print(f"   {PIPELINE_SIZE} pipeline leads: {stats}")
+
+
+def create_collaboration_tables(cur):
+    """Sprint III (after the progress review): invitations, lead activity timeline, handover requests and notifications."""
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS invitations (
+            invite_id    INT AUTO_INCREMENT PRIMARY KEY,
+            email        VARCHAR(100) NOT NULL,
+            full_name    VARCHAR(100) NULL,
+            role         VARCHAR(10) NOT NULL DEFAULT 'marketer',
+            token_hash   CHAR(64) NOT NULL UNIQUE,
+            invited_by   INT NOT NULL,
+            created_at   DATETIME NOT NULL,
+            expires_at   DATETIME NOT NULL,
+            accepted_at  DATETIME NULL,
+            revoked_at   DATETIME NULL,
+            CONSTRAINT fk_invitations_by FOREIGN KEY (invited_by) REFERENCES users(user_id),
+            CONSTRAINT chk_invitations_role CHECK (role IN ('admin', 'manager', 'marketer')),
+            INDEX idx_invitations_email (email)
+        )""")
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS lead_events (
+            event_id    INT AUTO_INCREMENT PRIMARY KEY,
+            lead_id     INT NOT NULL,
+            user_id     INT NULL,
+            event_type  VARCHAR(20) NOT NULL,
+            from_user   INT NULL,
+            to_user     INT NULL,
+            note        VARCHAR(500) NULL,
+            created_at  DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+            CONSTRAINT fk_lead_events_lead FOREIGN KEY (lead_id) REFERENCES leads(lead_id),
+            CONSTRAINT fk_lead_events_user FOREIGN KEY (user_id) REFERENCES users(user_id),
+            CONSTRAINT fk_lead_events_from FOREIGN KEY (from_user) REFERENCES users(user_id),
+            CONSTRAINT fk_lead_events_to FOREIGN KEY (to_user) REFERENCES users(user_id),
+            CONSTRAINT chk_lead_events_type CHECK (event_type IN ('created', 'assigned', 'reassigned',
+                'handed_over', 'reopened', 'requested', 'request_declined')),
+            INDEX idx_lead_events_lead (lead_id)
+        )""")
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS handover_requests (
+            request_id    INT AUTO_INCREMENT PRIMARY KEY,
+            lead_id       INT NOT NULL,
+            requested_by  INT NOT NULL,
+            owner_id      INT NULL,
+            reason        VARCHAR(300) NOT NULL,
+            status        VARCHAR(10) NOT NULL DEFAULT 'pending',
+            created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            decided_by    INT NULL,
+            decided_at    DATETIME NULL,
+            decision_note VARCHAR(300) NULL,
+            CONSTRAINT fk_requests_lead FOREIGN KEY (lead_id) REFERENCES leads(lead_id),
+            CONSTRAINT fk_requests_by FOREIGN KEY (requested_by) REFERENCES users(user_id),
+            CONSTRAINT fk_requests_owner FOREIGN KEY (owner_id) REFERENCES users(user_id),
+            CONSTRAINT fk_requests_decided FOREIGN KEY (decided_by) REFERENCES users(user_id),
+            CONSTRAINT chk_requests_status CHECK (status IN ('pending', 'accepted', 'declined', 'cancelled')),
+            INDEX idx_requests_lead (lead_id, status)
+        )""")
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS notifications (
+            notification_id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id         INT NOT NULL,
+            message         VARCHAR(300) NOT NULL,
+            lead_id         INT NULL,
+            request_id      INT NULL,
+            created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            read_at         DATETIME NULL,
+            CONSTRAINT fk_notifications_user FOREIGN KEY (user_id) REFERENCES users(user_id),
+            CONSTRAINT fk_notifications_lead FOREIGN KEY (lead_id) REFERENCES leads(lead_id),
+            CONSTRAINT fk_notifications_request FOREIGN KEY (request_id) REFERENCES handover_requests(request_id),
+            INDEX idx_notifications_user (user_id, read_at)
+        )""")
+    print("   invitations, lead_events, handover_requests, notifications ready")
 
 
 def create_views(cur):
