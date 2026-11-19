@@ -38,7 +38,7 @@ Marketing teams often have more leads than they can follow up, and decide who to
 - **Python 3** (pandas, NumPy, scikit-learn 1.6.1, imbalanced-learn 0.14.2, joblib, SHAP) in **Google Colab** for training
 - **Streamlit** web application with **bcrypt** passwords and **Google sign-in (OpenID Connect)**
 - **MySQL 9.1** with MySQL Workbench
-- **Cloudflare Tunnel** to make the application available online; **Hugging Face Spaces** files for serving the model
+- **Cloudflare Tunnel** to make the application available online
 - **Git / GitHub Desktop**
 
 ## Repository Structure
@@ -46,7 +46,6 @@ Marketing teams often have more leads than they can follow up, and decide who to
 ```
 SalesMesh/
 ├── app/           Web application, its automated tests, setup_database.py and refresh_demo_dates.py
-├── deployment/    Hugging Face Space files for serving the model online
 ├── Data/          Raw Kaggle lead data and cleaned leads
 ├── database/      Schema and data load scripts (SQL)
 ├── notebooks/     ML pipeline, new-lead scoring (Sprint II) and explainability notebooks
@@ -131,9 +130,10 @@ The 20% of test leads with the highest scores contained 45.1% of all conversions
 | Part | Where | How |
 |---|---|---|
 | Web application | **Cloudflare Tunnel** | `app/Start SalesMesh online.bat` starts the application and gives it a public https address (`*.trycloudflare.com`) while MySQL stays on the host laptop. The address changes each time it is started, and the application is online only while the laptop is on. Google sign-in works only on the registered `localhost` address; online users sign in with email and password. |
-| Model serving | **Hugging Face Spaces** (free CPU) | `deployment/huggingface/` contains a Gradio page that scores one lead or a CSV file, with `/score_lead` and `/score_csv` API endpoints. Upload these files plus `salesmesh_model.pkl` to a new Gradio Space. |
 
 ## Changes from the Original Plan
+
+- **No separate model hosting.** Hosting the model on Hugging Face Spaces was considered, but running a Python app there now requires a paid plan, so the model is served only inside the application.
 
 - **Power BI replaced by the Team page.** A three-page Power BI prototype was built in Sprint II. It showed the 9,240 historical leads rather than the working pipeline and duplicated what the application already showed, so in Sprint III the analytics were built into the application as the Team page, where managers see live figures from the same pipeline the marketers work in.
 - **Campaign analytics removed.** The marketing campaign dataset planned for ROI analysis was found to be synthetic (the same averages for every campaign type and channel) and had no link to the lead data, so it was not used.
@@ -144,5 +144,5 @@ The 20% of test leads with the highest scores contained 45.1% of all conversions
 - **Imputation before the split.** Missing values were filled using the full dataset before the train/test split, giving the test set a small influence on preprocessing.
 - **Simulated pipeline.** The demonstration pipeline uses test-set leads with simulated follow-ups; the system has not been used by a real marketing team.
 - **Explanations change one detail at a time** and do not capture details that only matter in combination (SHAP is used in the explainability notebook as a check).
-- **Email needs a working SMTP connection (defect D22, open).** On networks that block email, invitation and reset links are shown on screen or printed in the application window instead.
+- **Email needs a working SMTP connection (defect D09, open).** On networks that block email, invitation and reset links are shown on screen or printed in the application window instead.
 - **Test accounts only.** The demonstration accounts are for testing; never store real credentials in the repository.

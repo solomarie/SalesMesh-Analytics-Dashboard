@@ -1,6 +1,0 @@
-# Same versions as Google Colab, where the model was trained (a different scikit-learn may not load the model)
-scikit-learn==1.6.1
-imbalanced-learn==0.14.2
-numpy==2.1.3
-pandas==2.2.3
-joblib
