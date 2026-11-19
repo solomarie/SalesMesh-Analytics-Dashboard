@@ -38,7 +38,7 @@ def test_manager_sees_everyone(people):
     assert {people["m1"]["user_id"], people["m2"]["user_id"]} <= owners
 
 
-# ---- handover, requests, reopen (FR-14, FR-15): refusals only
+# ---- handover, requests, reopen (FR-04, FR-05): refusals only
 def test_only_owner_or_manager_can_hand_over(people, open_lead_of):
     with pytest.raises(PermissionError):
         pipeline.handover_lead(people["m1"], open_lead_of(people["m2"]["user_id"]), people["m1"]["user_id"],

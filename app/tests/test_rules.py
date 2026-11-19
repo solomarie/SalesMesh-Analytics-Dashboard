@@ -8,7 +8,7 @@ from salesmesh import auth, pipeline, scoring
 TODAY = date(2026, 11, 2)
 
 
-# ---- stages (FR-08)
+# ---- stages (FR-04)
 @pytest.mark.parametrize("current, outcome, expected", [
     ("New", "No answer", "Contacted"),
     ("New", "Interested", "Qualified"),
@@ -31,7 +31,7 @@ def test_unknown_outcome_is_refused():
         pipeline.next_stage("New", "Maybe")
 
 
-# ---- follow-up form checks (FR-07, defect D17)
+# ---- follow-up form checks (FR-04, defect D03)
 def test_valid_follow_up_has_no_problems():
     assert pipeline.follow_up_problems("New", "Call", "Interested", TODAY, None, TODAY) == []
 
@@ -50,7 +50,7 @@ def test_open_outcome_needs_a_future_date():
     assert pipeline.follow_up_problems("New", "Call", "No answer", TODAY - timedelta(days=1), None, TODAY)
 
 
-# ---- due dates and overdue (FR-10)
+# ---- due dates and overdue (FR-03)
 @pytest.mark.parametrize("tier, days", [("High", 1), ("Medium", 3), ("Low", 7)])
 def test_first_contact_window_by_tier(tier, days):
     assigned = datetime(2026, 11, 2, 9, 0)
@@ -107,7 +107,7 @@ def test_exclude_and_empty_team():
 # ---- sign-in rules
 @pytest.mark.parametrize("email, ok", [
     ("jane@salesmesh.com", True), ("first.last@company.co.ke", True),
-    ("bad..email@x.com", False),   # defect D24
+    ("bad..email@x.com", False),   # defect D04
     ("no-at-sign.com", False), ("a@b", False),
 ])
 def test_email_format(email, ok):

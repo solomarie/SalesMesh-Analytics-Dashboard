@@ -370,7 +370,7 @@ def log_follow_up_form(user, lead):
 
 
 def reopen_form(user, lead):
-    """FR-15: a Lost customer calls back or replies; reopen the lead and record the contact."""
+    """FR-04: a Lost customer calls back or replies; reopen the lead and record the contact."""
     k = f"ro_{lead['lead_id']}"
     st.caption("Use this when a lost customer gets back in touch. The lead reopens with the marketer who "
                "handled it before (if they are still on the team) and goes back on the call list.")
@@ -392,7 +392,7 @@ def reopen_form(user, lead):
 
 
 def handover_form(user, lead):
-    """FR-14: give the lead to a named colleague, for example because the customer asked for them."""
+    """FR-05: give the lead to a named colleague, for example because the customer asked for them."""
     k = f"ho_{lead['lead_id']}"
     marketers = pipeline.active_marketers()
     others = marketers[marketers["user_id"] != lead["assigned_to"]] if not marketers.empty else marketers
@@ -731,7 +731,7 @@ def lead_input(box, col, allowed, default=None):
 
 
 def enter_one_lead(user, allowed):
-    """FR-02/FR-12: the score and its reasons update live while the lead's details are filled in."""
+    """FR-02: the score and its reasons update live while the lead's details are filled in."""
     if st.session_state.get("clear_lead_form"):
         _clear_lead_form()
     if "new_pid" not in st.session_state:

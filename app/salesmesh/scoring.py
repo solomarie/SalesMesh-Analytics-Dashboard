@@ -1,6 +1,6 @@
 """
 Scoring: validate new leads, score them with the trained model, assign the
-FR-04 priority tier and explain each score in plain words (FR-12).
+priority tier and explain each score in plain words (FR-02).
 
 The validation rules are the same as in SalesMesh_Score_New_Leads.ipynb, except that
 the six optional details below may be left out. A detail that is not provided is stored

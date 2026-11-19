@@ -1,8 +1,8 @@
 """
 Lead pipeline: stages, follow-ups, assignment, overdue rules and team performance.
 
-FR-07 lead capture and instant scoring, FR-08 automatic assignment, FR-09 follow-up
-tracking, FR-10 call list and overdue alerts, FR-11 team performance.
+FR-02 lead capture and instant scoring, FR-03 automatic assignment and the call list,
+FR-04 follow-up tracking, FR-05 handover and requests, FR-06 team performance.
 Every function that reads or changes data checks the user's role on the server side.
 """
 from datetime import date, datetime, timedelta
@@ -101,7 +101,7 @@ def get_leads(user: dict, stages=None, marketer_id=None) -> pd.DataFrame:
 
 
 def call_list(user: dict) -> pd.DataFrame:
-    """FR-10: open leads that need attention today or earlier, overdue first, then by score."""
+    """FR-03: open leads that need attention today or earlier, overdue first, then by score."""
     leads = get_leads(user, stages=OPEN_STAGES)
     if leads.empty:
         return leads
@@ -141,7 +141,7 @@ def active_marketers() -> pd.DataFrame:
 
 def choose_owner(load: dict, last_assigned: dict, exclude=None):
     """
-    FR-08 assignment rule: the active marketer with the fewest open leads. When several are tied,
+    FR-03 assignment rule: the active marketer with the fewest open leads. When several are tied,
     the one who has waited longest since their last new lead goes first (fair round-robin), so the
     same person is not always picked. Returns None when nobody is available.
     """
@@ -172,7 +172,7 @@ def team_performance(user: dict) -> pd.DataFrame:
 # ---------------------------------------------------------------- changing
 def log_follow_up(user: dict, lead_id: int, follow_up_type: str, outcome: str, notes: str,
                   next_date, lost_reason=None, today: date = None) -> str:
-    """FR-09: record a contact and move the lead to its new stage in one transaction."""
+    """FR-04: record a contact and move the lead to its new stage in one transaction."""
     require_role(user, "admin", "manager", "marketer")
     today = today or date.today()
     conn = db.connect()
@@ -210,7 +210,7 @@ def log_follow_up(user: dict, lead_id: int, follow_up_type: str, outcome: str, n
 
 
 def reassign_lead(user: dict, lead_id: int, new_marketer_id: int, note: str = None):
-    """FR-08: a manager moves an open (or lost) lead to another active marketer."""
+    """FR-05: a manager moves an open (or lost) lead to another active marketer."""
     require_role(user, "admin", "manager")
     _move_lead(user, lead_id, new_marketer_id, "reassigned", note or "Reassigned by the manager")
 
@@ -267,7 +267,7 @@ def known(value):
 
 def add_leads(user: dict, batch: pd.DataFrame):
     """
-    FR-07 and FR-08: validate new leads, score them immediately, assign each one to
+    FR-02 and FR-03: validate new leads, score them immediately, assign each one to
     the marketer with the fewest open leads and save everything in one transaction.
     Returns (saved leads, rejected rows).
     """
@@ -463,7 +463,7 @@ def _name_map():
 
 
 def timeline(user: dict, lead_id: int) -> list:
-    """FR-13: everything that happened to a lead, newest first: events and follow-ups together."""
+    """FR-04: everything that happened to a lead, newest first: events and follow-ups together."""
     lead = get_lead(user, lead_id)
     names = _name_map()
     items = []
@@ -512,7 +512,7 @@ def find_leads(user: dict, text: str) -> pd.DataFrame:
 
 
 def handover_lead(user: dict, lead_id: int, to_user: int, reason: str):
-    """FR-14: the owner (or a manager) hands a lead to a named colleague, with a reason."""
+    """FR-05: the owner (or a manager) hands a lead to a named colleague, with a reason."""
     require_role(user, "admin", "manager", "marketer")
     reason = (reason or "").strip()
     if len(reason) < 3:
@@ -526,7 +526,7 @@ def handover_lead(user: dict, lead_id: int, to_user: int, reason: str):
 
 
 def request_lead(user: dict, lead_id: int, reason: str) -> int:
-    """FR-14: a marketer asks to take over someone else's lead; the owner accepts or declines."""
+    """FR-05: a marketer asks to take over someone else's lead; the owner accepts or declines."""
     require_role(user, "marketer")
     reason = (reason or "").strip()
     if len(reason) < 3:
@@ -619,7 +619,7 @@ def decide_request(user: dict, request_id: int, accept: bool, note: str = "") ->
 def reopen_lead(user: dict, lead_id: int, follow_up_type: str, outcome: str, notes: str, next_date,
                 today: date = None) -> str:
     """
-    FR-15: a Lost lead whose customer comes back is reopened and the new contact is recorded.
+    FR-04: a Lost lead whose customer comes back is reopened and the new contact is recorded.
     It stays with (or goes back to) the marketer who handled it before, if they are still active.
     """
     require_role(user, "admin", "manager", "marketer")

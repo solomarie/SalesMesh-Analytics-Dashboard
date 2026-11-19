@@ -27,8 +27,8 @@ def test_a_good_row_passes(reference):
 def test_bad_rows_are_rejected_with_reasons(reference):
     rows = pd.DataFrame([
         lead(reference, pid=""),
-        lead(reference, pid="X" * 101),                                 # defect D23
-        lead(reference, pid="DUP"), lead(reference, pid="DUP"),         # defect D18
+        lead(reference, pid="X" * 101),                                 # defect D02
+        lead(reference, pid="DUP"), lead(reference, pid="DUP"),         # defect D01
         lead(reference, pid="OLD"),
         lead(reference, pid="NEG", TotalVisits="-1"),
         lead(reference, pid="CAT", **{"Lead Source": "Carrier pigeon"}),
